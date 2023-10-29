@@ -35,6 +35,7 @@ constexpr auto DEFAULT_COMMAND_UNSTAMPED_TOPIC = "~/cmd_vel_unstamped";
 constexpr auto DEFAULT_COMMAND_OUT_TOPIC = "~/cmd_vel_out";
 constexpr auto DEFAULT_ODOMETRY_TOPIC = "~/odom";
 constexpr auto DEFAULT_TRANSFORM_TOPIC = "/tf";
+constexpr auto DEFAULT_DIAGNOSTICS_TOPIC = "~/diagnostics";
 }  // namespace
 
 namespace diff_drive_controller
@@ -101,6 +102,14 @@ InterfaceConfiguration DiffDriveController::state_interface_configuration() cons
 controller_interface::return_type DiffDriveController::update(
   const rclcpp::Time & time, const rclcpp::Duration & period)
 {
+  diagnostic_msgs::msg::DiagnosticArray diag_array;
+  diagnostic_msgs::msg::DiagnosticStatus robot_status;
+  diag_array.header.stamp = time;
+  robot_status.name = "Jeeves_Diff_Drive";
+  robot_status.hardware_id = "0xf1";
+  robot_status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+  robot_status.message = "DiffDriveController::update Diagnostics";
+
   auto logger = get_node()->get_logger();
   if (get_state().id() == State::PRIMARY_STATE_INACTIVE)
   {
@@ -144,7 +153,13 @@ controller_interface::return_type DiffDriveController::update(
 
   if (params_.open_loop)
   {
+    diagnostic_msgs::msg::KeyValue diag_OpenLoop;
     odometry_.updateOpenLoop(linear_command, angular_command, time);
+    diag_OpenLoop.key = "OpenLoop";
+    diag_OpenLoop.value = " linear_command = " + std::to_string(linear_command) + 
+                          " angular command = " + std::to_string(angular_command) +
+                          " period = " + std::to_string(period.seconds());
+    robot_status.values.push_back(diag_OpenLoop);
   }
   else
   {
@@ -155,13 +170,16 @@ controller_interface::return_type DiffDriveController::update(
       const double left_feedback = registered_left_wheel_handles_[index].feedback.get().get_value();
       const double right_feedback =
         registered_right_wheel_handles_[index].feedback.get().get_value();
-
+      const auto r_name = registered_right_wheel_handles_[index].feedback.get().get_name();
       if (std::isnan(left_feedback) || std::isnan(right_feedback))
       {
         RCLCPP_ERROR(
-          logger, "Either the left or right wheel %s is invalid for index [%zu]", feedback_type(),
-          index);
+          logger, "Either the left or right wheel %s is invalid for index [%zu] feedback type %s", feedback_type(),
+          index,params_.position_feedback ? "POSITION" : "VELOCITY");
         return controller_interface::return_type::ERROR;
+      } else {
+        RCLCPP_DEBUG(logger,"State Interface %s returned value %f feedback type %s",
+                    r_name.c_str(),right_feedback,feedback_type());
       }
 
       left_feedback_mean += left_feedback;
@@ -172,15 +190,38 @@ controller_interface::return_type DiffDriveController::update(
 
     if (params_.position_feedback)
     {
+      diagnostic_msgs::msg::KeyValue diag_position;
       odometry_.update(left_feedback_mean, right_feedback_mean, time);
+      diag_position.key = "Position";
+      diag_position.value = " left feedback = " + std::to_string(left_feedback_mean) +
+                            " right feedback = " + std::to_string(right_feedback_mean) +
+                            " period = " + std::to_string(period.seconds());
+      robot_status.values.push_back(diag_position);
     }
     else
     {
+      diagnostic_msgs::msg::KeyValue diag_update;
       odometry_.updateFromVelocity(
         left_feedback_mean * left_wheel_radius * period.seconds(),
         right_feedback_mean * right_wheel_radius * period.seconds(), time);
+      diag_update.key = "Velocity";
+      diag_update.value = " left feedback = " + std::to_string(left_feedback_mean * left_wheel_radius * period.seconds()) +
+                          " right feedback = " + std::to_string(right_feedback_mean * right_wheel_radius * period.seconds()) +
+                          " period = " + std::to_string(period.seconds());
+      robot_status.values.push_back(diag_update);
     }
   }
+  diagnostic_msgs::msg::KeyValue diag_loc;
+  diag_loc.key = "odometry";
+  diag_loc.value = " X = " + std::to_string(odometry_.getX()) +
+                   " Y = " + std::to_string(odometry_.getY()) +
+                   " Linear = " + std::to_string(odometry_.getLinear()) +
+                   " Angular = " + std::to_string(odometry_.getAngular()) +
+                   " Wheel Radius = " + std::to_string(left_wheel_radius) +
+                   " Wheel separation = " + std::to_string(wheel_separation);
+  robot_status.values.push_back(diag_loc);
+  diag_array.status.push_back(robot_status);
+  diagnostic_publisher_->publish(diag_array);
 
   tf2::Quaternion orientation;
   orientation.setRPY(0.0, 0.0, odometry_.getHeading());
@@ -203,6 +244,8 @@ controller_interface::return_type DiffDriveController::update(
 
   if (should_publish)
   {
+    previous_publish_timestamp_ += publish_period_;
+
     if (realtime_odometry_publisher_->trylock())
     {
       auto & odometry_message = realtime_odometry_publisher_->msg_;
@@ -216,7 +259,7 @@ controller_interface::return_type DiffDriveController::update(
       odometry_message.twist.twist.linear.x = odometry_.getLinear();
       odometry_message.twist.twist.angular.z = odometry_.getAngular();
       realtime_odometry_publisher_->unlockAndPublish();
-    }
+    } 
 
     if (params_.enable_odom_tf && realtime_odometry_transform_publisher_->trylock())
     {
@@ -413,7 +456,7 @@ controller_interface::CallbackReturn DiffDriveController::on_configure(
   // limit the publication on the topics /odom and /tf
   publish_rate_ = params_.publish_rate;
   publish_period_ = rclcpp::Duration::from_seconds(1.0 / publish_rate_);
-
+  RCLCPP_INFO(get_node()->get_logger(),"Publish rate %f",publish_rate_);
   // initialize odom values zeros
   odometry_message.twist =
     geometry_msgs::msg::TwistWithCovariance(rosidl_runtime_cpp::MessageInitialization::ALL);
@@ -441,6 +484,10 @@ controller_interface::CallbackReturn DiffDriveController::on_configure(
   odometry_transform_message.transforms.front().child_frame_id = base_frame_id;
 
   previous_update_timestamp_ = get_node()->get_clock()->now();
+
+  // Diagnostics message
+  diagnostic_publisher_ = get_node()->create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
+    DEFAULT_DIAGNOSTICS_TOPIC,rclcpp::SystemDefaultsQoS());
   return controller_interface::CallbackReturn::SUCCESS;
 }
 

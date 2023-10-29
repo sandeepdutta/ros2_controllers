@@ -43,6 +43,9 @@
 #include "tf2_msgs/msg/tf_message.hpp"
 
 #include "diff_drive_controller_parameters.hpp"
+#include "diagnostic_msgs/msg/diagnostic_array.hpp"
+#include "diagnostic_msgs/msg/diagnostic_status.hpp"
+#include "diagnostic_msgs/msg/key_value.hpp"
 
 namespace diff_drive_controller
 {
@@ -142,6 +145,9 @@ protected:
   std::shared_ptr<realtime_tools::RealtimePublisher<Twist>> realtime_limited_velocity_publisher_ =
     nullptr;
 
+  // diagnostics publisher
+  std::shared_ptr<rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>> diagnostic_publisher_ =
+    nullptr;
   rclcpp::Time previous_update_timestamp_{0};
 
   // publish rate limiter
