@@ -76,7 +76,7 @@ bool Odometry::updateFromVelocity(double left_vel, double right_vel, const rclcp
   const double dt = time.seconds() - timestamp_.seconds();
 
   // Compute linear and angular diff:
-  const double linear = (left_vel + right_vel) * 0.5;
+  const double linear = (left_vel + right_vel) * -0.5;
   // Now there is a bug about scout angular velocity
   const double angular = (right_vel - left_vel) / wheel_separation_;
 
