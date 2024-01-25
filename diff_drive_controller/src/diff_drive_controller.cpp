@@ -206,7 +206,9 @@ controller_interface::return_type DiffDriveController::update(
         right_feedback_mean * right_wheel_radius * period.seconds(), time);
       diag_update.key = "Velocity";
       diag_update.value = " left feedback = " + std::to_string(left_feedback_mean * left_wheel_radius * period.seconds()) +
+                          " left raw = " + std::to_string(left_feedback_mean ) +
                           " right feedback = " + std::to_string(right_feedback_mean * right_wheel_radius * period.seconds()) +
+                          " right raw = " + std::to_string(right_feedback_mean) + 
                           " period = " + std::to_string(period.seconds());
       robot_status.values.push_back(diag_update);
     }
