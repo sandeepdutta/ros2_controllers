@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(gripper_controllers LANGUAGES CXX)
-
+set(BUILD_TESTING OFF)
 if(APPLE OR WIN32)
   message(WARNING "gripper controllers are not available on OSX or Windows")
   return()

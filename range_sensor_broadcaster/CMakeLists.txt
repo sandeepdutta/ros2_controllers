@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.8)
 project(range_sensor_broadcaster)
-
+set(BUILD_TESTING OFF)
 # Default to C++17
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)

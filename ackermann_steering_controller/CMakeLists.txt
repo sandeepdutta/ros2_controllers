@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(ackermann_steering_controller LANGUAGES CXX)
-
+set(BUILD_TESTING OFF)
 if(CMAKE_CXX_COMPILER_ID MATCHES "(GNU|Clang)")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()

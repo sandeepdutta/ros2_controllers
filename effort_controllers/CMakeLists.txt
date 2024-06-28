@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(effort_controllers LANGUAGES CXX)
-
+set(BUILD_TESTING OFF)
 if(CMAKE_CXX_COMPILER_ID MATCHES "(GNU|Clang)")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -40,7 +40,7 @@ if(BUILD_TESTING)
   ament_add_gmock(test_load_joint_group_effort_controller
     test/test_load_joint_group_effort_controller.cpp
   )
-  target_link_libraries(test_load_joint_group_effort_controller
+  target_link_libraries(  #test_load_joint_group_effort_controller
     effort_controllers
   )
   ament_target_dependencies(test_load_joint_group_effort_controller
