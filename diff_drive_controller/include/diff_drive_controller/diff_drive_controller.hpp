@@ -171,9 +171,9 @@ protected:
   double odometry_y;
   double odometry_linear;
   double odometry_angular;
-
+  rclcpp::Time previous_diagnostic_update_timestamp_;
   void updateDiagnostic(diagnostic_updater::DiagnosticStatusWrapper &stat);
-  
+
   // publish rate limiter
   double publish_rate_ = 50.0;
   rclcpp::Duration publish_period_ = rclcpp::Duration::from_nanoseconds(0);

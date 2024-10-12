@@ -63,7 +63,7 @@ controller_interface::CallbackReturn DiffDriveController::on_init()
     updater = new diagnostic_updater::Updater(get_node());
     updater->setHardwareID("diff_drive_controller");
     updater->add("DiffDriveController", this, &DiffDriveController::updateDiagnostic);
-
+    previous_diagnostic_update_timestamp_ = get_node()->now();
   }
   catch (const std::exception & e)
   {
@@ -234,7 +234,11 @@ controller_interface::return_type DiffDriveController::update(
     previous_publish_timestamp_ = time;
     should_publish = true;
   }
-  updater->force_update(); // update diagnostics
+  rclcpp::Duration diag_duration = time - previous_diagnostic_update_timestamp_;
+  if (diag_duration.seconds() > 0.1) {
+    updater->force_update(); // update diagnostics
+    previous_diagnostic_update_timestamp_ = time;
+  }
   if (should_publish)
   {
     previous_publish_timestamp_ += publish_period_;
