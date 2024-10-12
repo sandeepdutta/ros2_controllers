@@ -35,7 +35,6 @@ constexpr auto DEFAULT_COMMAND_UNSTAMPED_TOPIC = "~/cmd_vel_unstamped";
 constexpr auto DEFAULT_COMMAND_OUT_TOPIC = "~/cmd_vel_out";
 constexpr auto DEFAULT_ODOMETRY_TOPIC = "~/odom";
 constexpr auto DEFAULT_TRANSFORM_TOPIC = "/tf";
-constexpr auto DEFAULT_DIAGNOSTICS_TOPIC = "~/diagnostics";
 }  // namespace
 
 namespace diff_drive_controller
@@ -61,6 +60,10 @@ controller_interface::CallbackReturn DiffDriveController::on_init()
     // Create the parameter listener and get the parameters
     param_listener_ = std::make_shared<ParamListener>(get_node());
     params_ = param_listener_->get_params();
+    updater = new diagnostic_updater::Updater(get_node());
+    updater->setHardwareID("diff_drive_controller");
+    updater->add("DiffDriveController", this, &DiffDriveController::updateDiagnostic);
+
   }
   catch (const std::exception & e)
   {
@@ -112,13 +115,6 @@ InterfaceConfiguration DiffDriveController::state_interface_configuration() cons
 controller_interface::return_type DiffDriveController::update(
   const rclcpp::Time & time, const rclcpp::Duration & period)
 {
-  diagnostic_msgs::msg::DiagnosticArray diag_array;
-  diagnostic_msgs::msg::DiagnosticStatus robot_status;
-  diag_array.header.stamp = time;
-  robot_status.name = "Jeeves_Diff_Drive";
-  robot_status.hardware_id = "0xf1";
-  robot_status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
-  robot_status.message = "DiffDriveController::update Diagnostics";
 
   auto logger = get_node()->get_logger();
   if (get_state().id() == State::PRIMARY_STATE_INACTIVE)
@@ -163,13 +159,7 @@ controller_interface::return_type DiffDriveController::update(
 
   if (params_.open_loop)
   {
-    diagnostic_msgs::msg::KeyValue diag_OpenLoop;
     odometry_.updateOpenLoop(linear_command, angular_command, time);
-    diag_OpenLoop.key = "OpenLoop";
-    diag_OpenLoop.value = " linear_command = " + std::to_string(linear_command) + 
-                          " angular command = " + std::to_string(angular_command) +
-                          " period = " + std::to_string(period.seconds());
-    robot_status.values.push_back(diag_OpenLoop);
   }
   else
   {
@@ -190,78 +180,42 @@ controller_interface::return_type DiffDriveController::update(
         RCLCPP_DEBUG(logger,"State Interface %s returned value %f feedback type %s",
                     r_name.c_str(),right_feedback,feedback_type());
       }
-      double received_count = registered_right_wheel_handles_[index].received_count.get().get_value();
-      double sent_count = registered_right_wheel_handles_[index].sent_count.get().get_value();
-      double motor_temperature = registered_right_wheel_handles_[index].motor_temperature.get().get_value();
-      double motor_current = registered_right_wheel_handles_[index].motor_current.get().get_value();
-      double vbus_voltage = registered_right_wheel_handles_[index].vbus_voltage.get().get_value();
-      diagnostic_msgs::msg::KeyValue diag_right_wheel;
-      diag_right_wheel.key = "Right Wheel";
-      diag_right_wheel.value = " Received count = " + std::to_string(received_count) +
-                        " sent count = " + std::to_string(sent_count) +
-                        " motor temperature = " + std::to_string(motor_temperature) +
-                        " motor current = " + std::to_string(motor_current) +
-                        " vbus voltage = " + std::to_string(vbus_voltage);
-      robot_status.values.push_back(diag_right_wheel);
-
-      received_count = registered_left_wheel_handles_[index].received_count.get().get_value();
-      sent_count = registered_left_wheel_handles_[index].sent_count.get().get_value();
-      motor_temperature = registered_left_wheel_handles_[index].motor_temperature.get().get_value();
-      motor_current = registered_left_wheel_handles_[index].motor_current.get().get_value();
-      vbus_voltage = registered_left_wheel_handles_[index].vbus_voltage.get().get_value();
-      diagnostic_msgs::msg::KeyValue diag_left_wheel;
-      diag_left_wheel.key = "Left Wheel";
-      diag_left_wheel.value = " Received count = " + std::to_string(received_count) +
-                        " sent count = " + std::to_string(sent_count) +
-                        " motor temperature = " + std::to_string(motor_temperature) +
-                        " motor current = " + std::to_string(motor_current) +
-                        " vbus voltage = " + std::to_string(vbus_voltage);
-      robot_status.values.push_back(diag_left_wheel); 
       
       left_feedback_mean += left_feedback;
       right_feedback_mean += right_feedback;
 
+      // right side diagnostics
+      right_received_count    = registered_right_wheel_handles_[index].received_count.get().get_value();
+      right_sent_count        = registered_right_wheel_handles_[index].sent_count.get().get_value();
+      right_motor_temperature = registered_right_wheel_handles_[index].motor_temperature.get().get_value();
+      right_motor_current     = registered_right_wheel_handles_[index].motor_current.get().get_value();
+      right_vbus_voltage      = registered_right_wheel_handles_[index].vbus_voltage.get().get_value();
+      // left side diagnostics
+      left_received_count = registered_left_wheel_handles_[index].received_count.get().get_value();
+      left_sent_count = registered_left_wheel_handles_[index].sent_count.get().get_value();
+      left_motor_temperature = registered_left_wheel_handles_[index].motor_temperature.get().get_value();
+      left_motor_current = registered_left_wheel_handles_[index].motor_current.get().get_value();
+      left_vbus_voltage = registered_left_wheel_handles_[index].vbus_voltage.get().get_value();
     }
     left_feedback_mean /= params_.wheels_per_side;
     right_feedback_mean /= params_.wheels_per_side;
 
     if (params_.position_feedback)
     {
-      diagnostic_msgs::msg::KeyValue diag_position;
       odometry_.update(left_feedback_mean, right_feedback_mean, time);
-      diag_position.key = "Position";
-      diag_position.value = " left feedback = " + std::to_string(left_feedback_mean) +
-                            " right feedback = " + std::to_string(right_feedback_mean) +
-                            " period = " + std::to_string(period.seconds());
-      robot_status.values.push_back(diag_position);
     }
     else
     {
-      diagnostic_msgs::msg::KeyValue diag_update;
       odometry_.updateFromVelocity(
         left_feedback_mean * left_wheel_radius * period.seconds(),
         right_feedback_mean * right_wheel_radius * period.seconds(), time);
-      diag_update.key = "Velocity";
-      diag_update.value = " left feedback = " + std::to_string(left_feedback_mean * left_wheel_radius * period.seconds()) +
-                          " left raw = " + std::to_string(left_feedback_mean ) +
-                          " right feedback = " + std::to_string(right_feedback_mean * right_wheel_radius * period.seconds()) +
-                          " right raw = " + std::to_string(right_feedback_mean) + 
-                          " period = " + std::to_string(period.seconds());
-      robot_status.values.push_back(diag_update);
     }
   }
-  diagnostic_msgs::msg::KeyValue diag_loc;
-  diag_loc.key = "odometry";
-  diag_loc.value = " X = " + std::to_string(odometry_.getX()) +
-                   " Y = " + std::to_string(odometry_.getY()) +
-                   " Linear = " + std::to_string(odometry_.getLinear()) +
-                   " Angular = " + std::to_string(odometry_.getAngular()) +
-                   " Wheel Radius = " + std::to_string(left_wheel_radius) +
-                   " Wheel separation = " + std::to_string(wheel_separation);
-  robot_status.values.push_back(diag_loc);
-  diag_array.status.push_back(robot_status);
-  diagnostic_publisher_->publish(diag_array);
-
+  // for diagnostics
+  odometry_x = odometry_.getX();
+  odometry_y = odometry_.getY();
+  odometry_linear = odometry_.getLinear();
+  odometry_angular = odometry_.getAngular();
   tf2::Quaternion orientation;
   orientation.setRPY(0.0, 0.0, odometry_.getHeading());
 
@@ -280,7 +234,7 @@ controller_interface::return_type DiffDriveController::update(
     previous_publish_timestamp_ = time;
     should_publish = true;
   }
-
+  updater->force_update(); // update diagnostics
   if (should_publish)
   {
     previous_publish_timestamp_ += publish_period_;
@@ -523,10 +477,6 @@ controller_interface::CallbackReturn DiffDriveController::on_configure(
   odometry_transform_message.transforms.front().child_frame_id = base_frame_id;
 
   previous_update_timestamp_ = get_node()->get_clock()->now();
-
-  // Diagnostics message
-  diagnostic_publisher_ = get_node()->create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
-    DEFAULT_DIAGNOSTICS_TOPIC,rclcpp::SystemDefaultsQoS());
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
@@ -746,6 +696,24 @@ controller_interface::CallbackReturn DiffDriveController::configure_side(
   }
 
   return controller_interface::CallbackReturn::SUCCESS;
+}
+void DiffDriveController::updateDiagnostic(diagnostic_updater::DiagnosticStatusWrapper &stat)
+{
+  stat.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "DiffDriveController");
+  stat.add("Left Received Count", left_received_count);
+  stat.add("Left Sent Count", left_sent_count);
+  stat.add("Left Motor Temperature", left_motor_temperature);
+  stat.add("Left Motor Current", left_motor_current);
+  stat.add("Left Vbus Voltage", left_vbus_voltage);
+  stat.add("Right Received Count", right_received_count);
+  stat.add("Right Sent Count", right_sent_count);
+  stat.add("Right Motor Temperature", right_motor_temperature);
+  stat.add("Right Motor Current", right_motor_current);
+  stat.add("Right Vbus Voltage", right_vbus_voltage);
+  stat.add("Odometry X", odometry_x);
+  stat.add("Odometry Y", odometry_y);
+  stat.add("Odometry Linear", odometry_linear);
+  stat.add("Odometry Angular", odometry_angular);
 }
 }  // namespace diff_drive_controller
 

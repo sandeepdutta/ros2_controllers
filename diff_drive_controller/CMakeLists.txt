@@ -19,6 +19,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   tf2
   tf2_msgs
   diagnostic_msgs
+  diagnostic_updater
 )
 
 find_package(ament_cmake REQUIRED)

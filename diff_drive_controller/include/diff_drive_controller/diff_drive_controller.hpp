@@ -43,6 +43,8 @@
 #include "tf2_msgs/msg/tf_message.hpp"
 
 #include "diff_drive_controller_parameters.hpp"
+#include <diagnostic_updater/diagnostic_updater.hpp>
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "diagnostic_msgs/msg/key_value.hpp"
@@ -150,11 +152,28 @@ protected:
   std::shared_ptr<realtime_tools::RealtimePublisher<Twist>> realtime_limited_velocity_publisher_ =
     nullptr;
 
-  // diagnostics publisher
-  std::shared_ptr<rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>> diagnostic_publisher_ =
-    nullptr;
   rclcpp::Time previous_update_timestamp_{0};
+  // Diagnostics related
+  diagnostic_updater::Updater *updater;
+  double right_received_count;
+  double right_sent_count;
+  double right_motor_temperature;
+  double right_motor_current;
+  double right_vbus_voltage;
 
+  double left_received_count;
+  double left_sent_count;
+  double left_motor_temperature;
+  double left_motor_current;
+  double left_vbus_voltage;
+
+  double odometry_x;
+  double odometry_y;
+  double odometry_linear;
+  double odometry_angular;
+
+  void updateDiagnostic(diagnostic_updater::DiagnosticStatusWrapper &stat);
+  
   // publish rate limiter
   double publish_rate_ = 50.0;
   rclcpp::Duration publish_period_ = rclcpp::Duration::from_nanoseconds(0);
@@ -162,7 +181,6 @@ protected:
 
   bool is_halted = false;
   bool use_stamped_vel_ = true;
-
   bool reset();
   void halt();
 };
