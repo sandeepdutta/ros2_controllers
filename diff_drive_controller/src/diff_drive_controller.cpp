@@ -91,10 +91,20 @@ InterfaceConfiguration DiffDriveController::state_interface_configuration() cons
   for (const auto & joint_name : params_.left_wheel_names)
   {
     conf_names.push_back(joint_name + "/" + feedback_type());
+    conf_names.push_back(joint_name + "/vbus_voltage");
+    conf_names.push_back(joint_name + "/sent_count");
+    conf_names.push_back(joint_name + "/received_count");
+    conf_names.push_back(joint_name + "/motor_temperature");
+    conf_names.push_back(joint_name + "/motor_current");  
   }
   for (const auto & joint_name : params_.right_wheel_names)
   {
     conf_names.push_back(joint_name + "/" + feedback_type());
+    conf_names.push_back(joint_name + "/vbus_voltage");
+    conf_names.push_back(joint_name + "/sent_count");
+    conf_names.push_back(joint_name + "/received_count");
+    conf_names.push_back(joint_name + "/motor_temperature");
+    conf_names.push_back(joint_name + "/motor_current");  
   }
   return {interface_configuration_type::INDIVIDUAL, conf_names};
 }
@@ -167,9 +177,8 @@ controller_interface::return_type DiffDriveController::update(
     double right_feedback_mean = 0.0;
     for (size_t index = 0; index < static_cast<size_t>(params_.wheels_per_side); ++index)
     {
-      const double left_feedback = registered_left_wheel_handles_[index].feedback.get().get_value();
-      const double right_feedback =
-        registered_right_wheel_handles_[index].feedback.get().get_value();
+      const double left_feedback  = registered_left_wheel_handles_[index].feedback.get().get_value();
+      const double right_feedback = registered_right_wheel_handles_[index].feedback.get().get_value();
       const auto r_name = registered_right_wheel_handles_[index].feedback.get().get_name();
       if (std::isnan(left_feedback) || std::isnan(right_feedback))
       {
@@ -181,9 +190,37 @@ controller_interface::return_type DiffDriveController::update(
         RCLCPP_DEBUG(logger,"State Interface %s returned value %f feedback type %s",
                     r_name.c_str(),right_feedback,feedback_type());
       }
+      double received_count = registered_right_wheel_handles_[index].received_count.get().get_value();
+      double sent_count = registered_right_wheel_handles_[index].sent_count.get().get_value();
+      double motor_temperature = registered_right_wheel_handles_[index].motor_temperature.get().get_value();
+      double motor_current = registered_right_wheel_handles_[index].motor_current.get().get_value();
+      double vbus_voltage = registered_right_wheel_handles_[index].vbus_voltage.get().get_value();
+      diagnostic_msgs::msg::KeyValue diag_right_wheel;
+      diag_right_wheel.key = "Right Wheel";
+      diag_right_wheel.value = " Received count = " + std::to_string(received_count) +
+                        " sent count = " + std::to_string(sent_count) +
+                        " motor temperature = " + std::to_string(motor_temperature) +
+                        " motor current = " + std::to_string(motor_current) +
+                        " vbus voltage = " + std::to_string(vbus_voltage);
+      robot_status.values.push_back(diag_right_wheel);
 
+      received_count = registered_left_wheel_handles_[index].received_count.get().get_value();
+      sent_count = registered_left_wheel_handles_[index].sent_count.get().get_value();
+      motor_temperature = registered_left_wheel_handles_[index].motor_temperature.get().get_value();
+      motor_current = registered_left_wheel_handles_[index].motor_current.get().get_value();
+      vbus_voltage = registered_left_wheel_handles_[index].vbus_voltage.get().get_value();
+      diagnostic_msgs::msg::KeyValue diag_left_wheel;
+      diag_left_wheel.key = "Left Wheel";
+      diag_left_wheel.value = " Received count = " + std::to_string(received_count) +
+                        " sent count = " + std::to_string(sent_count) +
+                        " motor temperature = " + std::to_string(motor_temperature) +
+                        " motor current = " + std::to_string(motor_current) +
+                        " vbus voltage = " + std::to_string(vbus_voltage);
+      robot_status.values.push_back(diag_left_wheel); 
+      
       left_feedback_mean += left_feedback;
       right_feedback_mean += right_feedback;
+
     }
     left_feedback_mean /= params_.wheels_per_side;
     right_feedback_mean /= params_.wheels_per_side;
@@ -628,6 +665,61 @@ controller_interface::CallbackReturn DiffDriveController::configure_side(
       RCLCPP_ERROR(logger, "Unable to obtain joint state handle for %s", wheel_name.c_str());
       return controller_interface::CallbackReturn::ERROR;
     }
+    const auto sent_count_handle = std::find_if(
+      state_interfaces_.begin(), state_interfaces_.end(),
+      [&wheel_name](const auto & interface)
+      {
+        return interface.get_prefix_name() == wheel_name && interface.get_interface_name() == "sent_count";
+      });
+    if (sent_count_handle == state_interfaces_.end())
+    {
+      RCLCPP_ERROR(logger, "Unable to obtain joint sent count handle for %s", wheel_name.c_str());
+      return controller_interface::CallbackReturn::ERROR;
+    }
+    const auto received_count_handle = std::find_if(
+      state_interfaces_.begin(), state_interfaces_.end(),
+      [&wheel_name](const auto & interface)
+      {
+        return interface.get_prefix_name() == wheel_name && interface.get_interface_name() == "received_count";
+      });
+    if (received_count_handle == state_interfaces_.end())
+    {
+      RCLCPP_ERROR(logger, "Unable to obtain joint received count handle for %s", wheel_name.c_str());
+      return controller_interface::CallbackReturn::ERROR;
+    }
+    const auto motor_temperature_handle = std::find_if(
+      state_interfaces_.begin(), state_interfaces_.end(),
+      [&wheel_name](const auto & interface)
+      {
+        return interface.get_prefix_name() == wheel_name && interface.get_interface_name() == "motor_temperature";
+      });
+    if (motor_temperature_handle == state_interfaces_.end())
+    {
+      RCLCPP_ERROR(logger, "Unable to obtain joint motor temperature handle for %s", wheel_name.c_str());
+      return controller_interface::CallbackReturn::ERROR;
+    }
+    const auto motor_current_handle = std::find_if(
+      state_interfaces_.begin(), state_interfaces_.end(),
+      [&wheel_name](const auto & interface)
+      {
+        return interface.get_prefix_name() == wheel_name && interface.get_interface_name() == "motor_current";
+      });
+    if (motor_current_handle == state_interfaces_.end())
+    {
+      RCLCPP_ERROR(logger, "Unable to obtain joint motor current handle for %s", wheel_name.c_str());
+      return controller_interface::CallbackReturn::ERROR;
+    }
+    const auto vbus_voltage_handle = std::find_if(
+      state_interfaces_.begin(), state_interfaces_.end(),
+      [&wheel_name](const auto & interface)
+      {
+        return interface.get_prefix_name() == wheel_name && interface.get_interface_name() == "vbus_voltage";
+      });   
+    if (vbus_voltage_handle == state_interfaces_.end())
+    {
+      RCLCPP_ERROR(logger, "Unable to obtain joint vbus voltage handle for %s", wheel_name.c_str());
+      return controller_interface::CallbackReturn::ERROR;
+    } 
 
     const auto command_handle = std::find_if(
       command_interfaces_.begin(), command_interfaces_.end(),
@@ -644,7 +736,13 @@ controller_interface::CallbackReturn DiffDriveController::configure_side(
     }
 
     registered_handles.emplace_back(
-      WheelHandle{std::ref(*state_handle), std::ref(*command_handle)});
+      WheelHandle{std::ref(*state_handle), 
+            std::ref(*command_handle), 
+        std::ref(*sent_count_handle), 
+        std::ref(*received_count_handle), 
+        std::ref(*motor_temperature_handle), 
+        std::ref(*motor_current_handle), 
+        std::ref(*vbus_voltage_handle)  });
   }
 
   return controller_interface::CallbackReturn::SUCCESS;

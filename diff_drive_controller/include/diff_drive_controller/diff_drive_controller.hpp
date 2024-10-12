@@ -99,6 +99,11 @@ protected:
   {
     std::reference_wrapper<const hardware_interface::LoanedStateInterface> feedback;
     std::reference_wrapper<hardware_interface::LoanedCommandInterface> velocity;
+    std::reference_wrapper<hardware_interface::LoanedStateInterface> sent_count;
+    std::reference_wrapper<hardware_interface::LoanedStateInterface> received_count;
+    std::reference_wrapper<hardware_interface::LoanedStateInterface> motor_temperature;
+    std::reference_wrapper<hardware_interface::LoanedStateInterface> motor_current;
+    std::reference_wrapper<hardware_interface::LoanedStateInterface> vbus_voltage;
   };
 
   const char * feedback_type() const;
