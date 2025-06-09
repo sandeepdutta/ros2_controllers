@@ -64,6 +64,11 @@ controller_interface::CallbackReturn DiffDriveController::on_init()
     updater->setHardwareID("diff_drive_controller");
     updater->add("DiffDriveController", this, &DiffDriveController::updateDiagnostic);
     previous_diagnostic_update_timestamp_ = get_node()->now();
+    RCLCPP_INFO(get_node()->get_logger(), "DiffDriveController initialized");
+    RCLCPP_INFO(get_node()->get_logger(), "Reverse wheel direction: %d", params_.reverse_wheel_direction);
+    RCLCPP_INFO(get_node()->get_logger(), "Reverse angular velocity: %d", params_.reverse_angular_velocity);
+    RCLCPP_INFO(get_node()->get_logger(), "Reverse odometry wheel direction: %d", params_.reverse_odometry_wheel_direction);
+    RCLCPP_INFO(get_node()->get_logger(), "Reverse odometry angular velocity: %d", params_.reverse_odometry_angular_velocity);
   }
   catch (const std::exception & e)
   {
@@ -147,9 +152,11 @@ controller_interface::return_type DiffDriveController::update(
   // command may be limited further by SpeedLimit,
   // without affecting the stored twist command
   Twist command = *last_command_msg;
+  // reverse the direction of the wheels
   double & linear_command = command.twist.linear.x;
   double & angular_command = command.twist.angular.z;
-
+  if (params_.reverse_wheel_direction) linear_command = -linear_command;
+  if (params_.reverse_angular_velocity) angular_command = -angular_command;
   previous_update_timestamp_ = time;
 
   // Apply (possibly new) multipliers:
@@ -202,13 +209,19 @@ controller_interface::return_type DiffDriveController::update(
 
     if (params_.position_feedback)
     {
-      odometry_.update(left_feedback_mean, right_feedback_mean, time);
+      odometry_.update(left_feedback_mean, right_feedback_mean, 
+        params_.reverse_odometry_wheel_direction,
+        params_.reverse_odometry_angular_velocity,
+        time);
     }
     else
     {
       odometry_.updateFromVelocity(
         left_feedback_mean * left_wheel_radius * period.seconds(),
-        right_feedback_mean * right_wheel_radius * period.seconds(), time);
+        right_feedback_mean * right_wheel_radius * period.seconds(), 
+        params_.reverse_odometry_wheel_direction,
+        params_.reverse_odometry_angular_velocity,
+        time);
     }
   }
   // for diagnostics
@@ -235,10 +248,10 @@ controller_interface::return_type DiffDriveController::update(
     should_publish = true;
   }
   rclcpp::Duration diag_duration = time - previous_diagnostic_update_timestamp_;
-  if (diag_duration.seconds() > 0.1) {
-    updater->force_update(); // update diagnostics
-    previous_diagnostic_update_timestamp_ = time;
-  }
+  //if (diag_duration.seconds() > 0.1) {
+  //  updater->force_update(); // update diagnostics
+  //  previous_diagnostic_update_timestamp_ = time;
+  //}
   if (should_publish)
   {
     previous_publish_timestamp_ += publish_period_;

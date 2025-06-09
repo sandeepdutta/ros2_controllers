@@ -45,7 +45,7 @@ void Odometry::init(const rclcpp::Time & time)
   timestamp_ = time;
 }
 
-bool Odometry::update(double left_pos, double right_pos, const rclcpp::Time & time)
+bool Odometry::update(double left_pos, double right_pos, bool reverse_linear, bool reverse_angular, const rclcpp::Time & time)
 {
   // We cannot estimate the speed with very small time intervals:
   const double dt = time.seconds() - timestamp_.seconds();
@@ -66,19 +66,19 @@ bool Odometry::update(double left_pos, double right_pos, const rclcpp::Time & ti
   left_wheel_old_pos_ = left_wheel_cur_pos;
   right_wheel_old_pos_ = right_wheel_cur_pos;
 
-  updateFromVelocity(left_wheel_est_vel, right_wheel_est_vel, time);
+  updateFromVelocity(left_wheel_est_vel, right_wheel_est_vel, reverse_linear, reverse_angular, time);
 
   return true;
 }
 
-bool Odometry::updateFromVelocity(double left_vel, double right_vel, const rclcpp::Time & time)
+bool Odometry::updateFromVelocity(double left_vel, double right_vel, bool reverse_linear, bool reverse_angular, const rclcpp::Time & time)
 {
   const double dt = time.seconds() - timestamp_.seconds();
 
   // Compute linear and angular diff:
-  const double linear = (left_vel + right_vel) * -0.5;
+  const double linear = (left_vel + right_vel) * (reverse_linear ? -0.5 : 0.5);
   // Now there is a bug about scout angular velocity
-  const double angular = (right_vel - left_vel) / wheel_separation_;
+  const double angular = ((right_vel - left_vel) / wheel_separation_) * (reverse_angular ? -1.0 : 1.0);
 
   // Integrate odometry:
   integrateExact(linear, angular);

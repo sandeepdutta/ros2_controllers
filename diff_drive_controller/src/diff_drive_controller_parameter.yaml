@@ -99,6 +99,26 @@ diff_drive_controller:
     default_value: 50.0, # Hz
     description: "Publishing rate (Hz) of the odometry and TF messages.",
   }
+  reverse_wheel_direction: {
+    type: bool,
+    default_value: false,
+    description: "Reverse the direction of the wheels.",
+  }
+  reverse_odometry_wheel_direction: {
+    type: bool,
+    default_value: false,
+    description: "Reverse the direction of the odometry wheel.",
+  }
+  reverse_angular_velocity: {
+    type: bool,
+    default_value: false,
+    description: "Reverse the direction of the angular velocity.",
+  }
+  reverse_odometry_angular_velocity: {
+    type: bool,
+    default_value: false,
+    description: "Reverse the direction of the odometry angular velocity.",
+  }
   linear:
     x:
       has_velocity_limits: {
